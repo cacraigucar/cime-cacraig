@@ -399,6 +399,13 @@ my $var   = "DATM_PRESAERO";
 my $group = $definition->get_group_name($var);
 $nl->set_variable_value( $group, $var, "\'$xmlvars{$var}\'" );
 
+# water istotpes, depends on DATM_MODE, and affects the selection of the stream datasets as well
+# as data passed to the coupler.
+if ($DATM_MODE =~ /CLM_QIAN_WISO/) {
+  add_default($nl, "wiso_datm", 'val'=>'.true.');
+  $DATM_MODE = "CLM_QIAN";
+}
+
 ####################################
 # Streams file(s)                  #
 ####################################
@@ -424,6 +431,7 @@ $default_namelist_opts{'atm_grid'}         = $ATM_GRID;
 $default_namelist_opts{'datm_mode'}        = $DATM_MODE;
 $default_namelist_opts{'presaero_mode'}    = $DATM_PRESAERO;
 $default_namelist_opts{'datm_co2_tseries'} = $DATM_CO2_TSERIES;
+$default_namelist_opts{'wiso_datm'} = $nl->get_value('wiso_datm');
 
 # Create streams template file(s) - loop over streams
 my $streams = $defaults->get_value( "streamslist", \%default_namelist_opts );
