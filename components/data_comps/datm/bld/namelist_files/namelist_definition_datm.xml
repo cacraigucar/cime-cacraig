@@ -12,7 +12,7 @@
 type="char*256"  
 category="datm_setting"
 group="datm_env_settings" 
-valid_values="CLM_QIAN,CLM1PT,CLMCRUNCEP,CLMCRUNCEP_V5,CLMGSWP3,CPLHIST3HrWx,CORE2_NYF,CORE2_IAF,COPYALL_NPS_v1,COPYALL_CORE2_v1,WW3">
+valid_values="CLM_QIAN,CLM_QIAN_WISO,CLM1PT,CLMCRUNCEP,CLMCRUNCEP_V5,CLMGSWP3,CPLHIST3HrWx,CORE2_NYF,CORE2_IAF,COPYALL_NPS_v1,COPYALL_CORE2_v1,WW3">
 Data Model mode to process forcing data
 </entry>
 
@@ -338,6 +338,14 @@ type="logical"
 category="datm"
 group="datm_nml">
 If TRUE, prognostic is forced to true.
+default=false 
+</entry>
+
+<entry id="wiso_datm"
+type="logical" 
+category="datm"
+group="datm_nml">
+If TRUE, expect isotopic forcing from file
 default=false 
 </entry>
 
