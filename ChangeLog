@@ -1,5 +1,21 @@
 ======================================================================
 
+Originator: cacraigucar, bandre-ucar
+Date: August 4, 2016
+Tag: 
+Answer Changes: None
+Tests: 
+
+      SMS_D_Ld3.f10_f10.ICLM50WISO.yellowstone_intel.clm-default.junk-svn-wiso
+      SMS_D_Ld3.f10_f10.ICRUCLM50BGC.yellowstone_intel.clm-default.junk-svn-default
+
+Dependencies: None
+
+Brief Summary:  Add water isotope forcing to datm
+
+User interface changes: none
+======================================================================
+
 Originator: cacraigucar
 Date: June 30, 2016
 Tag: cime4.5.21

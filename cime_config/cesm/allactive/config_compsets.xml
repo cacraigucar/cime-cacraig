@@ -148,6 +148,10 @@
     <alias>BiHISTC5CN</alias>
     <lname>HIST_CAM5_CLM40%CN_WISO_CICE%WISO_POP2%ISO_RTM%WISO_SGLC_SWAV</lname>
   </compset>
+  <compset> 
+    <alias>BiHISTC5CN5</alias>
+    <lname>HIST_CAM5_CLM50%CN_WISO_CICE%WISO_POP2%ISO_RTM%WISO_SGLC_SWAV</lname>
+  </compset>
   <compset>
     <alias>BHISTC5L40CNR</alias>
     <lname>HIST_CAM5_CLM40%CN_CICE_POP2_RTM_SGLC_WW3</lname>
