@@ -35,6 +35,7 @@ OPTIONS
      -help [or -h]         Print usage to STDOUT.
      -silent               Turn on silent mode
      -verbose              Turn on verbose echoing of informational messages.
+     -cime_model           CIME_MODEL (acme or cesm)
      -caseroot             CASEROOT directory variable
      -cimeroot             CIMEROOT directory variable
      -grid                 GRID variable
@@ -47,7 +48,7 @@ OPTIONS
 
 NOTE: The precedence for setting the values of namelist variables is (highest to lowest):
       1. values read from the file specified by -infile,
-      2. values from the namelist defaults file 
+      2. values from the namelist defaults file
 EOF
 }
 
@@ -74,6 +75,7 @@ if ($ProgDir) {
 
 my %opts = ( help        => 0,
 	     silent      => 0,
+	     cime_model  => 0,
 	     caseroot    => 0,
 	     cimeroot    => 0,
 	     grid        => 0,
@@ -89,6 +91,7 @@ GetOptions(
     "infile=s"      => \$opts{'infile'},
     "s|silent"      => \$opts{'silent'},
     "v|verbose"     => \$opts{'verbose'},
+    "cime_model=s"  => \$opts{'cime_model'},
     "caseroot=s"    => \$opts{'caseroot'},
     "cimeroot=s"    => \$opts{'cimeroot'},
     "grid=s"        => \$opts{'grid'},
@@ -118,6 +121,7 @@ if ($opts{'silent'})  { $print = 0; }
 if ($opts{'verbose'}) { $print = 2; }
 my $eol = "\n";
 
+my $CIME_MODEL  = $opts{'cime_model'};
 my $CASEROOT    = $opts{'caseroot'};
 my $CIMEROOT    = $opts{'cimeroot'};
 my $GRID        = $opts{'grid'};
@@ -192,7 +196,7 @@ EOF
 (-f "$perl5lib_dir/Build/Namelist.pm")  or  die <<"EOF";
 ** $ProgName - Cannot find perl module \"Build/Namelist.pm\" in directory \"$perl5lib_dir\" **
 EOF
-my @nl_definition_filenames = ( "namelist_definition_drv.xml", 
+my @nl_definition_filenames = ( "namelist_definition_drv.xml",
                                 "namelist_definition_drv_flds.xml",
                                 "namelist_definition_modio.xml" );
 my @nl_definition_paths;
@@ -276,33 +280,21 @@ if (defined $opts{'infile'}) {
     $nl->merge_nl($nl_infile_valid);
 }
 
+unshift @INC, "${CIMEROOT}/utils/perl5lib";
+require Config::SetupTools;
+
 #-----------------------------------------------------------------------------------------------
 # Determine xml variables
 #-----------------------------------------------------------------------------------------------
-
-my %xmlvars = ();
-my @files = <${CASEROOT}/*xml>;
-foreach my $file (@files) {
-    my $xml = XML::Lite->new( "$file" );
-    my @e = $xml->elements_by_name('entry');
-    while ( my $e = shift @e ) {
-	my %a = $e->get_attributes();
-	$xmlvars{$a{'id'}} = $a{'value'};
-    }
-}
-my $DIN_LOC_ROOT = $xmlvars{'DIN_LOC_ROOT'};
-if ($print>=2) { print "inputdata root directory: $DIN_LOC_ROOT$eol"; }
-
-# Note - $USER is not in the config_defintion.xml file - it is only in the environment
-$xmlvars{'USER'} = $ENV{'USER'};
-unshift @INC, "${CIMEROOT}/utils/perl5lib";
-require Config::SetupTools;
 
 my %xmlvars = ();
 SetupTools::getxmlvars($CASEROOT, \%xmlvars);
 foreach my $attr (keys %xmlvars) {
     $xmlvars{$attr} = SetupTools::expand_xml_var($xmlvars{$attr}, \%xmlvars);
 }
+
+my $DIN_LOC_ROOT = $xmlvars{'DIN_LOC_ROOT'};
+if ($print>=2) { print "inputdata root directory: $DIN_LOC_ROOT$eol"; }
 
 #-----------------------------------------------------------------------------------------------
 # Read in versions fo the drv_flds_in file from different components and merge them together
@@ -324,14 +316,14 @@ foreach my $fldsin ( @fldsinfiles ) {
        if ($@) {
           die "$ProgName - ERROR: Invalid namelist variable in '-infile' $opts{'infile'}.\n $@";
        }
-   
+
        # Merge input values into namelist.  Die if a conflict is found.
        $nl->merge_nl($nl_infile_valid, die_on_conflict=>1);
    }
 }
 
 #-----------------------------------------------------------------------------------------------
-# Determine drv namelist 
+# Determine drv namelist
 #-----------------------------------------------------------------------------------------------
 
 #############################################
@@ -380,6 +372,8 @@ add_default($nl, 'cplflds_custom', 'val'=>'');
 #############################################
 # namelist group: seq_infodata_inparm       #
 #############################################
+
+add_default($nl, 'cime_model', 'val'=>$CIME_MODEL);
 
 my $PTS_MODE = "$xmlvars{'PTS_MODE'}";
 
@@ -758,9 +752,12 @@ add_default($nl, 'pio_buffer_size_limit');
 if($opts{pio_version} == 1){
     add_default($nl, 'pio_rearr_comm_type', 'PIO_REARR_COMM_TYPE'=>"$xmlvars{'PIO_REARR_COMM_TYPE'}");
     add_default($nl, 'pio_rearr_comm_fcd', 'PIO_REARR_COMM_FCD'=>"$xmlvars{'PIO_REARR_COMM_FCD'}");
-    add_default($nl, 'pio_rearr_comm_max_pend_req', 'PIO_REARR_COMM_MAX_PEND_REQ'=>"$xmlvars{'PIO_REARR_COMM_MAX_PEND_REQ'}");
-    add_default($nl, 'pio_rearr_comm_enable_hs', 'PIO_REARR_COMM_ENABLE_HS'=>"$xmlvars{'PIO_REARR_COMM_ENABLE_HS'}");
-    add_default($nl, 'pio_rearr_comm_enable_isend', 'PIO_REARR_COMM_ENABLE_ISEND'=>"$xmlvars{'PIO_REARR_COMM_ENABLE_ISEND'}");
+    add_default($nl, 'pio_rearr_comm_max_pend_req_comp2io', 'PIO_REARR_COMM_MAX_PEND_REQ_COMP2IO'=>"$xmlvars{'PIO_REARR_COMM_MAX_PEND_REQ_COMP2IO'}");
+    add_default($nl, 'pio_rearr_comm_enable_hs_comp2io', 'PIO_REARR_COMM_ENABLE_HS_COMP2IO'=>"$xmlvars{'PIO_REARR_COMM_ENABLE_HS_COMP2IO'}");
+    add_default($nl, 'pio_rearr_comm_enable_isend_comp2io', 'PIO_REARR_COMM_ENABLE_ISEND_COMP2IO'=>"$xmlvars{'PIO_REARR_COMM_ENABLE_ISEND_COMP2IO'}");
+    add_default($nl, 'pio_rearr_comm_max_pend_req_io2comp', 'PIO_REARR_COMM_MAX_PEND_REQ_IO2COMP'=>"$xmlvars{'PIO_REARR_COMM_MAX_PEND_REQ_IO2COMP'}");
+    add_default($nl, 'pio_rearr_comm_enable_hs_io2comp', 'PIO_REARR_COMM_ENABLE_HS_IO2COMP'=>"$xmlvars{'PIO_REARR_COMM_ENABLE_HS_IO2COMP'}");
+    add_default($nl, 'pio_rearr_comm_enable_isend_io2comp', 'PIO_REARR_COMM_ENABLE_ISEND_IO2COMP'=>"$xmlvars{'PIO_REARR_COMM_ENABLE_ISEND_IO2COMP'}");
 }
 # Note: pio_async_interface=.true. is not yet supported
 # If pio_async_interface is .true. or {component}_PIO_* variable is not set or set to -99
@@ -818,7 +815,8 @@ add_default($nl, 'lnd2atm_smapname');
 add_default($nl, 'lnd2rof_fmapname');
 add_default($nl, 'rof2lnd_fmapname');
 add_default($nl, 'rof2ocn_fmapname');
-add_default($nl, 'rof2ocn_rmapname');
+add_default($nl, 'rof2ocn_liq_rmapname');
+add_default($nl, 'rof2ocn_ice_rmapname');
 add_default($nl, 'glc2ocn_rmapname');
 add_default($nl, 'glc2ice_rmapname');
 add_default($nl, 'lnd2glc_fmapname');
@@ -853,7 +851,8 @@ add_default($nl, 'lnd2atm_smaptype', 'BFBFLAG'=>"$xmlvars{'BFBFLAG'}");
 add_default($nl, 'lnd2rof_fmaptype', 'BFBFLAG'=>"$xmlvars{'BFBFLAG'}");
 add_default($nl, 'rof2lnd_fmaptype', 'BFBFLAG'=>"$xmlvars{'BFBFLAG'}");
 add_default($nl, 'rof2ocn_fmaptype', 'BFBFLAG'=>"$xmlvars{'BFBFLAG'}");
-add_default($nl, 'rof2ocn_rmaptype', 'BFBFLAG'=>"$xmlvars{'BFBFLAG'}");
+add_default($nl, 'rof2ocn_liq_rmaptype', 'BFBFLAG'=>"$xmlvars{'BFBFLAG'}");
+add_default($nl, 'rof2ocn_ice_rmaptype', 'BFBFLAG'=>"$xmlvars{'BFBFLAG'}");
 add_default($nl, 'glc2ocn_rmaptype', 'BFBFLAG'=>"$xmlvars{'BFBFLAG'}");
 add_default($nl, 'glc2ice_rmaptype', 'BFBFLAG'=>"$xmlvars{'BFBFLAG'}");
 add_default($nl, 'lnd2glc_fmaptype', 'BFBFLAG'=>"$xmlvars{'BFBFLAG'}");
@@ -882,7 +881,7 @@ $definition->validate($nl);
 # (1) Write output namelist files (drv_in, and drv_flds_in)
 #-----------------------------------------------------------------------------------------------
 
-# Write out drv_in namelist groups 
+# Write out drv_in namelist groups
 my @groups = qw(seq_cplflds_inparm
 		seq_cplflds_userspec
 		seq_infodata_inparm
@@ -901,7 +900,7 @@ if ($print>=2) { print "Writing driver namelist to $outfile $eol"; }
 my $outfile = "./drv_flds_in";
 $nl->write($outfile, 'groups'=>\@groups);
 if ($print>=2) { print "Writing driver fields namelist to $outfile $eol"; }
-               
+
 #-----------------------------------------------------------------------------------------------
 # (2) Write out seq_map.rc file
 #-----------------------------------------------------------------------------------------------
@@ -925,7 +924,7 @@ print $fh <<"EOF";
 #                   if necessary
 #
 # NOTE:  For bfb on different processor counts, set all maptypes to "X".
-################################################################## 
+##################################################################
 EOF
 $fh->close();
 

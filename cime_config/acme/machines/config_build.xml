@@ -573,7 +573,7 @@ for mct, etc.
   <SFC> pgf95 </SFC>
 </compiler>
 
-<compiler COMPILER="pgi_acc">
+<compiler COMPILER="pgiacc">
   <CFLAGS>
     <base> -Mlist -time </base>
     <append compile_threaded="false"> </append>
@@ -1357,14 +1357,6 @@ for mct, etc.
   </SLIBS>
 </compiler>
 
-<compiler MACH="penn" COMPILER="gnu">
-  <NETCDF_PATH><env>NETCDFROOT</env></NETCDF_PATH>
-  <PNETCDF_PATH><env>PNETCDFROOT</env></PNETCDF_PATH>
-  <SLIBS>
-    <append> <shell><var>NETCDF_PATH</var>/bin/nf-config --flibs</shell> -lblas </append>
-  </SLIBS>
-</compiler>
-
 <compiler MACH="redsky" COMPILER="intel">
   <ALBANY_PATH>/projects/ccsm/AlbanyTrilinos/Albany/build/install</ALBANY_PATH>
   <CFLAGS>
@@ -1515,7 +1507,7 @@ for mct, etc.
   <TRILINOS_PATH>/lustre/atlas/world-shared/cli900/cesm/software/Trilinos/Trilinos-11.10.2_gptl/titan-pgi-ci-nophal/install</TRILINOS_PATH>
 </compiler>
 
-<compiler MACH="titan" COMPILER="pgi_acc">
+<compiler MACH="titan" COMPILER="pgiacc">
   <CFLAGS>
     <append DEBUG="FALSE"> -O2 </append>
   </CFLAGS>

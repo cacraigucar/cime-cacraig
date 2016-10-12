@@ -2,7 +2,7 @@
 Common functions used by cime python scripts
 Warning: you cannot use CIME Classes in this module as it causes circular dependencies
 """
-import logging, gzip, sys, os, time, re, shutil
+import logging, gzip, sys, os, time, re, shutil, glob, string, random
 
 # Return this error code if the scripts worked but tests failed
 TESTS_FAILED_ERR_CODE = 100
@@ -24,6 +24,9 @@ def expect(condition, error_msg, exc_type=SystemExit):
         #import pdb
         #pdb.set_trace()
         raise exc_type("ERROR: %s" % error_msg)
+
+def id_generator(size=6, chars=string.ascii_lowercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
 
 # Should only be called from get_cime_config()
 def _read_cime_config_file():
@@ -68,7 +71,7 @@ def get_python_libs_location_within_cime():
     """
     return os.path.join("utils", "python")
 
-def get_cime_root():
+def get_cime_root(case=None):
     """
     Return the absolute path to the root of CIME that contains this script
 
@@ -86,6 +89,11 @@ def get_cime_root():
             assert script_absdir.endswith(get_python_libs_location_within_cime()), script_absdir
             cimeroot = os.path.abspath(os.path.join(script_absdir,"..",".."))
         cime_config.set('main','CIMEROOT',cimeroot)
+
+    if case is not None:
+        case_cimeroot = os.path.abspath(case.get_value("CIMEROOT"))
+        cimeroot = os.path.abspath(cimeroot)
+        expect(cimeroot == case_cimeroot, "Inconsistant CIMEROOT variable: case %s environment %s"%(case_cimeroot, cimeroot))
 
     logger.debug( "CIMEROOT is " + cimeroot)
     return cimeroot
@@ -142,7 +150,7 @@ def get_model():
 
 _hack=object()
 def run_cmd(cmd, input_str=None, from_dir=None, verbose=None,
-            arg_stdout=_hack, arg_stderr=_hack):
+            arg_stdout=_hack, arg_stderr=_hack, env=None):
     """
     Wrapper around subprocess to make it much more convenient to run shell commands
 
@@ -170,7 +178,8 @@ def run_cmd(cmd, input_str=None, from_dir=None, verbose=None,
                             stdout=arg_stdout,
                             stderr=arg_stderr,
                             stdin=stdin,
-                            cwd=from_dir)
+                            cwd=from_dir,
+                            env=env)
 
     output, errput = proc.communicate(input_str)
     output = output.strip() if output is not None else output
@@ -489,14 +498,17 @@ def find_proc_id(proc_name=None,
 
     return list(rv)
 
-def get_utc_timestamp(timestamp_format="%Y%m%d_%H%M%S"):
+def get_timestamp(timestamp_format="%Y%m%d_%H%M%S", utc_time=False):
     """
     Get a string representing the current UTC time in format: YYMMDD_HHMMSS
 
     The format can be changed if needed.
     """
-    utc_time_tuple = time.gmtime()
-    return time.strftime(timestamp_format, utc_time_tuple)
+    if utc_time:
+        time_tuple = time.gmtime()
+    else:
+        time_tuple = time.localtime()
+    return time.strftime(timestamp_format, time_tuple)
 
 def get_project(machobj=None):
     """
@@ -526,7 +538,10 @@ def get_project(machobj=None):
     projectfile = os.path.abspath(os.path.join(os.path.expanduser("~"), ".cesm_proj"))
     if (os.path.isfile(projectfile)):
         with open(projectfile,'r') as myfile:
-            project = myfile.read().rstrip()
+            for line in myfile:
+                project = line.rstrip()
+                if not project.startswith("#"):
+                    break
             logger.info("Using project from .cesm_proj: " + project)
             cime_config.set('main','PROJECT',project)
             return project
@@ -541,8 +556,10 @@ def get_project(machobj=None):
     return None
 
 def setup_standard_logging_options(parser):
+    helpfile = "%s.log"%sys.argv[0]
+    helpfile = os.path.join(os.getcwd(),os.path.basename(helpfile))
     parser.add_argument("-d", "--debug", action="store_true",
-                        help="Print debug information (very verbose) to file %s.log" % sys.argv[0])
+                        help="Print debug information (very verbose) to file %s" % helpfile)
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Add additional context (time and file) to log messages")
     parser.add_argument("-s", "--silent", action="store_true",
@@ -836,7 +853,7 @@ def get_build_threaded(case):
     force_threaded = case.get_value("BUILD_THREADED")
     if force_threaded:
         return True
-    comp_classes = case.get_value("COMP_CLASSES").split(',')
+    comp_classes = case.get_values("COMP_CLASSES")
     for comp_class in comp_classes:
         if comp_class == "DRV":
             comp_class = "CPL"
@@ -917,3 +934,24 @@ def find_system_test(testname, case):
     mod = import_module(path)
     return getattr(mod, m)
 
+def _get_most_recent_lid_impl(files):
+    """
+    >>> files = ['/foo/bar/acme.log.20160905_111212', '/foo/bar/acme.log.20160906_111212.gz']
+    >>> _get_most_recent_lid_impl(files)
+    ['20160905_111212', '20160906_111212']
+    """
+    results = []
+    for item in files:
+        basename = os.path.basename(item)
+        components = basename.split(".")
+        if len(components) > 2:
+            results.append(components[2])
+        else:
+            logger.warning("Apparent model log file '%s' did not conform to expected name format" % item)
+
+    return sorted(results)
+
+def get_lids(case):
+    model = case.get_value("MODEL")
+    rundir = case.get_value("RUNDIR")
+    return _get_most_recent_lid_impl(glob.glob("%s/%s.log*" % (rundir, model)))

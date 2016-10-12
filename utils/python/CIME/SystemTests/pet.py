@@ -6,63 +6,48 @@ This is an openmp test to determine that changing thread counts does not change 
 (2) do another initial run with nthrds=1 for all components (suffix: single_thread)
 """
 
-import shutil
 from CIME.XML.standard_module_setup import *
 from CIME.case_setup import case_setup
-from CIME.SystemTests.system_tests_common import SystemTestsCommon
+from CIME.SystemTests.system_tests_compare_two import SystemTestsCompareTwo
 
 logger = logging.getLogger(__name__)
 
-class PET(SystemTestsCommon):
+class PET(SystemTestsCompareTwo):
+
+    _COMPONENT_LIST = ('ATM','CPL','OCN','WAV','GLC','ICE','ROF','LND')
 
     def __init__(self, case):
         """
         initialize a test object
         """
-        SystemTestsCommon.__init__(self, case)
+        SystemTestsCompareTwo.__init__(self, case,
+                                       separate_builds = False,
+                                       run_two_suffix = 'single_thread',
+                                       run_one_description = 'default threading',
+                                       run_two_description = 'threads set to 1')
 
-    def build_phase(self, sharedlib_only=False, model_only=False):
+    def _case_one_setup(self):
         # first make sure that all components have threaded settings
-        for comp in ['ATM','CPL','OCN','WAV','GLC','ICE','ROF','LND']:
+        for comp in self._COMPONENT_LIST:
             if self._case.get_value("NTHRDS_%s"%comp) <= 1:
                 self._case.set_value("NTHRDS_%s"%comp, 2)
-        self._case.flush()
 
+        # Need to redo case_setup because we may have changed the number of threads
         case_setup(self._case, reset=True)
 
-        self.clean_build()
-        self.build_indv(sharedlib_only=sharedlib_only, model_only=model_only)
-
-    def _pet_first_phase(self):
-        #Do a run with default threading
-        self._case.set_value("CONTINUE_RUN",False)
-        self._case.set_value("REST_OPTION","none")
-        self._case.set_value("HIST_OPTION","$STOP_OPTION")
-        self._case.set_value("HIST_N","$STOP_N")
-        self._case.flush()
-
-        stop_n = self._case.get_value("STOP_N")
-        stop_option = self._case.get_value("STOP_OPTION")
-        logger.info("doing a %d %s initial test with default threading, no restarts written"
-                    % (stop_n, stop_option))
-
-        self.run_indv()
-
-    def _pet_second_phase(self):
+    def _case_two_setup(self):
         #Do a run with all threads set to 1
-        for comp in ['ATM','CPL','OCN','WAV','GLC','ICE','ROF','LND']:
+        for comp in self._COMPONENT_LIST:
             self._case.set_value("NTHRDS_%s"%comp, 1)
-        self._case.flush()
-        shutil.copy("env_mach_pes.xml", os.path.join("LockedFiles","env_mach_pes.xml"))
 
-        stop_n = self._case.get_value("STOP_N")
-        stop_option = self._case.get_value("STOP_OPTION")
-        logger.info("doing a %d %s initial test with threads set to 1, no restarts written"
-                    % (stop_n, stop_option))
+        # The need for this is subtle. On batch systems, the entire PET test runs
+        # under a single submission and that submission is configured based on
+        # the case settings for case 1, IE 2 threads for all components. This causes
+        # the procs-per-node to be half of what it would be for single thread. On some
+        # machines, if the mpiexec tries to exceed the procs-per-node that were given
+        # to the batch submission, things break. Setting MAX_TASKS_PER_NODE to half of
+        # it original value prevents this.
+        self._case.set_value("MAX_TASKS_PER_NODE", self._case.get_value("MAX_TASKS_PER_NODE") / 2)
 
-        self.run_indv(suffix="single_thread")
-        self._component_compare_test("base", "single_thread")
-
-    def run_phase(self):
-        self._pet_first_phase()
-        self._pet_second_phase()
+        # Need to redo case_setup because we may have changed the number of threads
+        case_setup(self._case, reset=True)

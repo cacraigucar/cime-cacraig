@@ -184,6 +184,15 @@ Modify user_nl_cpl to edit this.
 <!-- =========================== -->
 
 <entry
+id="cime_model"
+type="char*8"
+category="expdef"
+group="seq_infodata_inparm"
+valid_values="acme,cesm">
+cime model 
+</entry>
+
+<entry
 id="atm_adiabatic"
 type="logical"
 category="expdef"
@@ -2116,28 +2125,54 @@ valid values: 2denable,io2comp,comp2io,disable,default
 </entry>
 
 <entry
-id="pio_rearr_comm_max_pend_req"
+id="pio_rearr_comm_max_pend_req_comp2io"
 type="integer"
 category="pio"
 group="pio_default_inparm">
-pio rearranger communication max pending req
+pio rearranger communication max pending req (comp2io)
 </entry>
 
 <entry
-id="pio_rearr_comm_enable_hs"
+id="pio_rearr_comm_enable_hs_comp2io"
 type="logical"
 category="pio"
 group="pio_default_inparm">
-pio rearranger communication option: Enable handshake
+pio rearranger communication option: Enable handshake (comp2io)
 default: .true.
 </entry>
 
 <entry
-id="pio_rearr_comm_enable_isend"
+id="pio_rearr_comm_enable_isend_comp2io"
 type="logical"
 category="pio"
 group="pio_default_inparm">
-pio rearranger communication option: Enable isends
+pio rearranger communication option: Enable isends (comp2io)
+default: .false.
+</entry>
+
+<entry
+id="pio_rearr_comm_max_pend_req_io2comp"
+type="integer"
+category="pio"
+group="pio_default_inparm">
+pio rearranger communication max pending req (io2comp)
+</entry>
+
+<entry
+id="pio_rearr_comm_enable_hs_io2comp"
+type="logical"
+category="pio"
+group="pio_default_inparm">
+pio rearranger communication option: Enable handshake (io2comp)
+default: .true.
+</entry>
+
+<entry
+id="pio_rearr_comm_enable_isend_io2comp"
+type="logical"
+category="pio"
+group="pio_default_inparm">
+pio rearranger communication option: Enable isends (io2comp)
 default: .false.
 </entry>
 
@@ -2569,8 +2604,8 @@ on the source grid and then rearrangement and sum to the destination
 grid.
 </entry>
 
-<entry
-id="rof2ocn_rmapname"
+<entry 
+id="rof2ocn_liq_rmapname"
 type="char*256"
 category="mapping"
 input_pathname="abs"
@@ -2578,8 +2613,29 @@ group="seq_maps">
 runoff to ocn nearest neighbor plus smoothing conservative mapping file
 </entry>
 
-<entry
-id="rof2ocn_rmaptype"
+<entry 
+id="rof2ocn_ice_rmapname"
+type="char*256"
+category="mapping" 
+input_pathname="abs"
+group="seq_maps">
+runoff to ocn nearest neighbor plus smoothing conservative mapping file
+</entry>
+
+<entry 
+id="rof2ocn_liq_rmaptype"
+type="char*256"
+category="mapping" 
+group="seq_maps">
+The type of mapping desired, either "source" or "destination" mapping.
+X is associated with rearrangement of the source grid to the
+destination grid and then local mapping.  Y is associated with mapping
+on the source grid and then rearrangement and sum to the destination
+grid.
+</entry>
+
+<entry 
+id="rof2ocn_ice_rmaptype"
 type="char*256"
 category="mapping"
 group="seq_maps">

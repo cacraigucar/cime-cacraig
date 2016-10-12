@@ -3,14 +3,14 @@ Interface to the env_batch.xml file.  This class inherits from EnvBase
 """
 import stat
 import time
+import re
+import math
 from CIME.XML.standard_module_setup import *
-from CIME.task_maker import TaskMaker
 from CIME.utils import convert_to_type
 from CIME.XML.env_base import EnvBase
 from CIME.utils import transform_vars, get_cime_root
 from copy import deepcopy
 
-import re
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,9 @@ class EnvBatch(EnvBase):
             if job_node is not None:
                 node = self.get_optional_node("entry", {"id":item}, root=job_node)
                 if node is not None:
-                    value = self.get_resolved_value(node.get("value"))
+                    value = node.get("value")
+                    if resolved:
+                        value = self.get_resolved_value(value)
 
                     # Return value as right type if we were able to fully resolve
                     # otherwise, we have to leave as string.
@@ -86,11 +88,11 @@ class EnvBatch(EnvBase):
                         value = convert_to_type(value, type_str, item)
         return value
 
-    def get_values(self, item, attribute=None, resolved=True, subgroup=None):
+    def get_full_records(self, item, attribute=None, resolved=True, subgroup=None):
         """Returns the value as a string of the first xml element with item as attribute value.
         <elememt_name attribute='attribute_value>value</element_name>"""
 
-        logger.debug("(get_values) Input values: %s , %s , %s , %s , %s" , self.__class__.__name__ , item, attribute, resolved, subgroup)
+        logger.debug("(get_full_records) Input values: %s , %s , %s , %s , %s" , self.__class__.__name__ , item, attribute, resolved, subgroup)
 
         nodes   = [] # List of identified xml elements
         results = [] # List of identified parameters
@@ -142,12 +144,12 @@ class EnvBatch(EnvBase):
                     filename        = self.filename
 
                     tmp = { 'group' : group_name , 'attribute' : attr , 'value' : val , 'type' : attribute_type , 'description' : desc , 'default' : default , 'file' : filename}
-                    logger.debug("Found node with value for %s = %s" , item , tmp )
+                    logger.debug("(get_full_records) Found node with value for %s = %s" , item , tmp )
 
                     # add single result to list
                     results.append(tmp)
 
-        logger.debug("(get_values) Return value:  %s" , results )
+        logger.debug("(get_full_records) Return value:  %s" , results )
 
         return results
 
@@ -216,39 +218,23 @@ class EnvBatch(EnvBase):
         if batchobj.machine_node is not None:
             self.root.append(deepcopy(batchobj.machine_node))
 
-    def make_batch_script(self, input_template, job, case):
+    def make_batch_script(self, input_template, job, case, total_tasks, tasks_per_node, num_nodes, thread_count):
         expect(os.path.exists(input_template), "input file '%s' does not exist" % input_template)
 
-        task_maker = TaskMaker(case)
+        self.tasks_per_node = tasks_per_node
+        self.num_tasks = total_tasks
+        self.tasks_per_numa = tasks_per_node / 2
+        self.thread_count = thread_count
 
-        self.maxthreads = task_maker.maxthreads
-        self.taskgeometry = task_maker.taskgeometry
-        self.threadgeometry = task_maker.threadgeometry
-        self.taskcount = task_maker.taskcount
-        self.thread_count = task_maker.thread_count
-        self.pedocumentation = task_maker.document()
-        self.ptile = task_maker.ptile
-        self.tasks_per_node = task_maker.tasks_per_node
-        self.max_tasks_per_node = task_maker.MAX_TASKS_PER_NODE
-        self.tasks_per_numa = task_maker.tasks_per_numa
-        self.num_tasks = task_maker.totaltasks
-
-        task_count = self.get_value("task_count")
+        task_count = self.get_value("task_count", subgroup=job)
         if task_count == "default":
-            self.sumpes = task_maker.fullsum
-            self.totaltasks = task_maker.totaltasks
-            self.fullsum = task_maker.fullsum
-            self.sumtasks = task_maker.totaltasks
-            self.task_count = task_maker.fullsum
-            self.num_nodes = task_maker.num_nodes
+            self.total_tasks = total_tasks
+            self.num_nodes = num_nodes
         else:
-            self.sumpes = task_count
-            self.totaltasks = task_count
-            self.fullsum = task_count
-            self.sumtasks = task_count
-            self.task_count = task_count
-            self.num_nodes = task_count
-            self.pedocumentation = ""
+            self.total_tasks = task_count
+            self.num_nodes = int(math.ceil(float(task_count)/float(tasks_per_node)))
+
+        self.pedocumentation = ""
         self.job_id = case.get_value("CASE") + os.path.splitext(job)[1]
         if "pleiades" in case.get_value("MACH"):
             # pleiades jobname needs to be limited to 15 chars
@@ -276,7 +262,7 @@ class EnvBatch(EnvBase):
             else:
                 task_count = int(task_count)
 
-            queue = force_queue if force_queue is not None else self.select_best_queue(task_count)
+            queue = force_queue if force_queue is not None else self.select_best_queue(task_count, job)
             self.set_value("JOB_QUEUE", queue, subgroup=job)
 
             walltime = self.get_max_walltime(queue) if walltime is None else walltime
@@ -330,11 +316,13 @@ class EnvBatch(EnvBase):
             if name is None:
                 submitargs+=" %s"%flag
             else:
+                if name.startswith("$"):
+                    name = name[1:]
                 val = case.get_value(name,subgroup=job)
                 if val is None:
                     val = case.get_resolved_value(name)
 
-                if val is not None and len(val) > 0 and val != "None":
+                if val is not None and len(str(val)) > 0 and val != "None":
                     # Try to evaluate val
                     try:
                         rval = eval(val)
@@ -362,8 +350,12 @@ class EnvBatch(EnvBase):
             if index < startindex:
                 continue
             try:
-                prereq = case.get_resolved_value(self.get_value('prereq', subgroup=job))
-                prereq = eval(prereq)
+                prereq = self.get_value('prereq', subgroup=job, resolved=False)
+                if prereq is None:
+                    prereq = True
+                else:
+                    prereq = case.get_resolved_value(prereq)
+                    prereq = eval(prereq)
             except:
                 expect(False,"Unable to evaluate prereq expression '%s' for job '%s'"%(self.get_value('prereq',subgroup=job), job))
             if prereq:
@@ -464,7 +456,7 @@ class EnvBatch(EnvBase):
         jobid = re.search(jobid_pattern, output).group(1)
         return jobid
 
-    def select_best_queue(self, num_pes):
+    def select_best_queue(self, num_pes, job=None):
         # Make sure to check default queue first.
         all_queues = []
         all_queues.append( self.get_default_queue())
@@ -473,8 +465,12 @@ class EnvBatch(EnvBase):
             if queue is not None:
                 jobmin = queue.get("jobmin")
                 jobmax = queue.get("jobmax")
+                jobname = queue.get("jobname")
+                if jobname is not None:
+                    if job == jobname:
+                        return queue.text
                 # if the fullsum is between the min and max # jobs, then use this queue.
-                if jobmin is not None and jobmax is not None and num_pes >= int(jobmin) and num_pes <= int(jobmax):
+                elif jobmin is not None and jobmax is not None and num_pes >= int(jobmin) and num_pes <= int(jobmax):
                     return queue.text
         return None
 

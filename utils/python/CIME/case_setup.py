@@ -6,11 +6,9 @@ from CIME.XML.standard_module_setup import *
 
 from CIME.check_lockedfiles import check_lockedfiles
 from CIME.preview_namelists import preview_namelists
-from CIME.task_maker        import TaskMaker
 from CIME.XML.env_mach_pes  import EnvMachPes
-from CIME.XML.component     import Component
 from CIME.XML.compilers     import Compilers
-from CIME.utils             import append_status, parse_test_name
+from CIME.utils             import append_status, parse_test_name, get_cime_root
 from CIME.user_mod_support  import apply_user_mods
 from CIME.test_status       import *
 
@@ -85,7 +83,7 @@ def _case_setup_impl(case, caseroot, casebaseid, clean=False, test_mode=False, r
     msg = "case.setup starting"
     append_status(msg, caseroot=caseroot, sfile="CaseStatus")
 
-    cimeroot = os.environ["CIMEROOT"]
+    cimeroot = get_cime_root(case)
 
     # Check that $DIN_LOC_ROOT exists - and abort if not a namelist compare tests
     din_loc_root = case.get_value("DIN_LOC_ROOT")
@@ -138,9 +136,7 @@ def _case_setup_impl(case, caseroot, casebaseid, clean=False, test_mode=False, r
         append_status(msg, caseroot=caseroot, sfile="CaseStatus")
 
     if not clean:
-        drv_comp = Component()
-        models = drv_comp.get_valid_model_components()
-        models.remove("DRV")
+        models = case.get_values("COMP_CLASSES")
 
         mach, compiler, debug, mpilib = \
             case.get_value("MACH"), case.get_value("COMPILER"), case.get_value("DEBUG"), case.get_value("MPILIB")
@@ -165,6 +161,8 @@ def _case_setup_impl(case, caseroot, casebaseid, clean=False, test_mode=False, r
         # Save ninst in a dict to use later in apply_user_mods
         ninst = dict()
         for comp in models:
+            if comp == "DRV":
+                continue
             comp_model = case.get_value("COMP_%s" % comp)
             ninst[comp_model]  = case.get_value("NINST_%s" % comp)
             ntasks = case.get_value("NTASKS_%s" % comp)
@@ -173,9 +171,6 @@ def _case_setup_impl(case, caseroot, casebaseid, clean=False, test_mode=False, r
                     case.set_value("NTASKS_%s" % comp, ninst[comp_model])
                 else:
                     expect(False, "NINST_%s value %d greater than NTASKS_%s %d" % (comp, ninst[comp_model], comp, ntasks))
-
-        expect(not (case.get_value("BUILD_THREADED") and compiler == "nag"),
-               "it is not possible to run with OpenMP if using the NAG Fortran compiler")
 
         if os.path.exists("case.run"):
             logger.info("Machine/Decomp/Pes configuration has already been done ...skipping")
@@ -187,39 +182,20 @@ def _case_setup_impl(case, caseroot, casebaseid, clean=False, test_mode=False, r
 
             case.flush()
             check_lockedfiles()
-
-            tm = TaskMaker(case)
-            pestot = tm.fullsum
+            env_mach_pes = case.get_env("mach_pes")
+            pestot = env_mach_pes.get_total_tasks(models)
+            logger.debug("at update TOTALPES = %s"%pestot)
             case.set_value("TOTALPES", pestot)
+            thread_count = env_mach_pes.get_max_thread_count(models)
+            if thread_count > 1:
+                case.set_value("BUILD_THREADED", True)
 
-            # Compute cost based on PE count
-            pval = 1
-            pcnt = 0
-            while pval < pestot:
-                pval *= 2
-                pcnt += 6 # (scaling like sqrt(6/10))
-            pcost = 3 - pcnt / 10 # (3 is 64 with 6)
+            expect(not (case.get_value("BUILD_THREADED")  and compiler == "nag"),
+                   "it is not possible to run with OpenMP if using the NAG Fortran compiler")
 
-            # Compute cost based on DEBUG
-            dcost = 3 if debug else 0
 
-            # Compute cost based on run length
-            # For simplicity, we use a heuristic just based on STOP_OPTION (not considering
-            # STOP_N), and only deal with options longer than ndays
-            lcost = 0
-            if "nmonth" in case.get_value("STOP_OPTION"):
-                # N months costs 30x as much as N days; since cost is based on log-base-2, add 5
-                lcost = 5
-            elif "nyear" in case.get_value("STOP_OPTION"):
-                # N years costs 365x as much as N days; since cost is based on log-base-2, add 9
-                lcost = 9
-
-            estcost = pcost + dcost + lcost
-            for cost in ["CCSM_CCOST", "CCSM_GCOST", "CCSM_TCOST", "CCSM_CCOST"]:
-                estcost += case.get_value(cost)
-
-            case.set_value("CCSM_PCOST", pcost)
-            case.set_value("CCSM_ESTCOST", estcost)
+            cost_pes = env_mach_pes.get_cost_pes(pestot, thread_count, machine=case.get_value("MACH"))
+            case.set_value("COST_PES", cost_pes)
 
             # create batch file
             logger.info("Creating batch script case.run")
@@ -227,6 +203,8 @@ def _case_setup_impl(case, caseroot, casebaseid, clean=False, test_mode=False, r
             # Use BatchFactory to get the appropriate instance of a BatchMaker,
             # use it to create our batch scripts
             env_batch = case.get_env("batch")
+            num_nodes = env_mach_pes.get_total_nodes(pestot, thread_count)
+            tasks_per_node = env_mach_pes.get_tasks_per_node(pestot, thread_count)
             for job in env_batch.get_jobs():
                 input_batch_script  = os.path.join(case.get_value("MACHDIR"), env_batch.get_value('template', subgroup=job))
                 if job == "case.test" and testcase is not None and not test_mode:
@@ -234,15 +212,16 @@ def _case_setup_impl(case, caseroot, casebaseid, clean=False, test_mode=False, r
                     testscript = os.path.join(cimeroot, "scripts", "Testing", "Testcases", "%s_script" % testcase)
                     # Short term fix to be removed when csh tests are removed
                     if not os.path.exists(testscript):
-                        env_batch.make_batch_script(input_batch_script, job, case)
+                        env_batch.make_batch_script(input_batch_script, job, case, pestot, tasks_per_node, num_nodes, thread_count)
                 elif job != "case.test":
-                    logger.info("Writing %s script" % job)
-                    env_batch.make_batch_script(input_batch_script, job, case)
+                    logger.info("Writing %s script from input template %s" % (job, input_batch_script))
+                    env_batch.make_batch_script(input_batch_script, job, case, pestot, tasks_per_node, num_nodes, thread_count)
 
             # Make a copy of env_mach_pes.xml in order to be able
             # to check that it does not change once case.setup is invoked
             logger.info("Locking file env_mach_pes.xml")
             case.flush()
+            logger.debug("at copy TOTALPES = %s"%case.get_value("TOTALPES"))
             shutil.copy("env_mach_pes.xml", "LockedFiles")
 
         # Create user_nl files for the required number of instances
@@ -258,18 +237,22 @@ def _case_setup_impl(case, caseroot, casebaseid, clean=False, test_mode=False, r
 
         _build_usernl_files(case, "drv", "cpl")
 
-        if case.get_value("TEST"):
+        user_mods_path = case.get_value("USER_MODS_FULLPATH")
+        if user_mods_path is not None:
+            apply_user_mods(caseroot, user_mods_path=user_mods_path, ninst=ninst)
+        elif case.get_value("TEST"):
             test_mods = parse_test_name(casebaseid)[6]
             if test_mods is not None:
                 user_mods_path = os.path.join(case.get_value("TESTS_MODS_DIR"), test_mods)
                 apply_user_mods(caseroot, user_mods_path=user_mods_path, ninst=ninst)
+
 
         # Run preview namelists for scripts
         logger.info("preview_namelists")
         preview_namelists(case)
 
         logger.info("See ./CaseDoc for component namelists")
-        logger.info("If an old case build already exists, might want to run \'case.build --clean-all\' before building")
+        logger.info("If an old case build already exists, might want to run \'case.build --clean\' before building")
 
         # Create test script if appropriate
         # Short term fix to be removed when csh tests are removed
@@ -295,12 +278,15 @@ def _case_setup_impl(case, caseroot, casebaseid, clean=False, test_mode=False, r
 def case_setup(case, clean=False, test_mode=False, reset=False):
 ###############################################################################
     caseroot, casebaseid = case.get_value("CASEROOT"), case.get_value("CASEBASEID")
-    test_name = casebaseid if casebaseid is not None else case.get_value("CASE")
-    with TestStatus(test_dir=caseroot, test_name=test_name) as ts:
-        try:
-            _case_setup_impl(case, caseroot, casebaseid, clean=clean, test_mode=test_mode, reset=reset)
-        except:
-            ts.set_status(SETUP_PHASE, TEST_FAIL_STATUS)
-            raise
-        else:
-            ts.set_status(SETUP_PHASE, TEST_PASS_STATUS)
+    if case.get_value("TEST"):
+        test_name = casebaseid if casebaseid is not None else case.get_value("CASE")
+        with TestStatus(test_dir=caseroot, test_name=test_name) as ts:
+            try:
+                _case_setup_impl(case, caseroot, casebaseid, clean=clean, test_mode=test_mode, reset=reset)
+            except:
+                ts.set_status(SETUP_PHASE, TEST_FAIL_STATUS)
+                raise
+            else:
+                ts.set_status(SETUP_PHASE, TEST_PASS_STATUS)
+    else:
+        _case_setup_impl(case, caseroot, casebaseid, clean=clean, test_mode=test_mode, reset=reset)

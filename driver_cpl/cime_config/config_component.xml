@@ -2,7 +2,7 @@
 
 <?xml-stylesheet type="text/xsl" href="config_compsets.xsl" ?>
 
-<entries>
+<entry_id>
 
 <!-- The list of component classes that this coupler/driver knows how
      to deal with.  Stub and data models for each component class
@@ -154,7 +154,7 @@
 
   <entry id="USER">
     <type>char</type>
-    <default_value>UNSET</default_value>
+    <default_value>$ENV{USER}</default_value>
     <group>case_desc</group>
     <file>env_case.xml</file>
     <desc>case user name</desc>
@@ -376,6 +376,9 @@
     <type>char</type>
     <valid_values>none,never,nsteps,nstep,nseconds,nsecond,nminutes,nminute,nhours,nhour,ndays,nday,nmonths,nmonth,nyears,nyear,date,ifdays0,end</valid_values>
     <default_value>never</default_value>
+    <values>
+      <value compset="_DATM.+_CLM">ndays</value>
+    </values>
     <group>run_begin_stop_restart</group>
     <file>env_run.xml</file>
     <desc>
@@ -505,6 +508,14 @@
     <group>run_data_archive</group>
     <file>env_run.xml</file>
     <desc></desc>
+  </entry>
+
+  <entry id="SYSLOG_N">
+    <type>integer</type>
+    <default_value>900</default_value>
+    <group>run_data_archive</group>
+    <file>env_run.xml</file>
+    <desc>system workload snapshot frequency (in seconds, if greater than 0; disabled otherwise)</desc>
   </entry>
 
   <!-- ===================================================================== -->
@@ -895,7 +906,7 @@
   <entry id="SAVE_TIMING_DIR">
     <type>char</type>
     <valid_values></valid_values>
-    <default_value>UNSET</default_value>
+    <default_value>timing</default_value>
     <group>run_flags</group>
     <file>env_run.xml</file>
     <desc>Where to auto archive timing data</desc>
@@ -930,30 +941,6 @@
           This variable is for testing and debugging only and should never
           be set for a production run.
     </desc>
-  </entry>
-
-  <entry id="CCSM_PCOST">
-    <type>integer</type>
-    <default_value>0</default_value>
-    <group>mach_pes_last</group>
-    <file>env_mach_pes.xml</file>
-    <desc>cost relative to 64 pes (DO NOT EDIT)</desc>
-  </entry>
-
-  <entry id="CCSM_TCOST">
-    <type>integer</type>
-    <default_value>0</default_value>
-    <group>mach_pes_last</group>
-    <file>env_mach_pes.xml</file>
-    <desc>relative cost of test where ERS is 1 (DO NOT EDIT)</desc>
-  </entry>
-
-  <entry id="CCSM_ESTCOST">
-    <type>integer</type>
-    <default_value>0</default_value>
-    <group>mach_pes_last</group>
-    <file>env_mach_pes.xml</file>
-    <desc>relative total cost of case (DO NOT EDIT)</desc>
   </entry>
 
   <entry id="COST_PES">
@@ -1553,7 +1540,7 @@
     <desc>rof2ocn flux mapping file decomp type</desc>
   </entry>
 
-  <entry id="ROF2OCN_RMAPNAME">
+  <entry id="ROF2OCN_LIQ_RMAPNAME">
     <type>char</type>
     <default_value>idmap</default_value>
     <group>run_domain</group>
@@ -1561,7 +1548,24 @@
     <desc>rof2ocn runoff mapping file</desc>
   </entry>
 
-  <entry id="ROF2OCN_RMAPTYPE">
+  <entry id="ROF2OCN_LIQ_RMAPTYPE">
+    <type>char</type>
+    <valid_values>X,Y</valid_values>
+    <default_value>Y</default_value>
+    <group>run_domain</group>
+    <file>env_run.xml</file>
+    <desc>rof2ocn runoff mapping file decomp type</desc>
+  </entry>
+
+  <entry id="ROF2OCN_ICE_RMAPNAME">
+    <type>char</type>
+    <default_value>idmap</default_value>
+    <group>run_domain</group>
+    <file>env_run.xml</file>
+    <desc>rof2ocn runoff mapping file</desc>
+  </entry>
+
+  <entry id="ROF2OCN_ICE_RMAPTYPE">
     <type>char</type>
     <valid_values>X,Y</valid_values>
     <default_value>Y</default_value>
@@ -1764,14 +1768,6 @@
     <group>case_def</group>
     <file>env_case.xml</file>
     <desc>Machine name</desc>
-  </entry>
-
-  <entry id="MACHINES_FILE">
-    <type>char</type>
-    <default_value></default_value>
-    <group>case_def</group>
-    <file>env_case.xml</file>
-    <desc>full pathname of file specifying supported machines location</desc>
   </entry>
 
   <entry id="MACHDIR">
@@ -2417,31 +2413,60 @@
     <desc>pio rearranger communication flow control direction</desc>
   </entry>
 
-  <entry id="PIO_REARR_COMM_MAX_PEND_REQ">
+  <entry id="PIO_REARR_COMM_MAX_PEND_REQ_COMP2IO">
     <type>integer</type>
     <valid_values></valid_values>
-    <default_value>64</default_value>
+    <default_value>0</default_value>
     <group>run_pio</group>
     <file>env_run.xml</file>
-    <desc>pio rearranger communication max pending requests</desc>
+    <desc>pio rearranger communication max pending requests (comp2io) : 0 implies that CIME internally calculates the value ( = max(64, 2 * PIO_NUMTASKS) ), -1 implies no bound on max pending requests </desc>
   </entry>
 
-  <entry id="PIO_REARR_COMM_ENABLE_HS">
+  <entry id="PIO_REARR_COMM_ENABLE_HS_COMP2IO">
     <type>logical</type>
     <valid_values>TRUE,FALSE</valid_values>
     <default_value>TRUE</default_value>
     <group>run_pio</group>
     <file>env_run.xml</file>
-    <desc>pio rearranger communiation options: TRUE implies enable handshake</desc>
+    <desc>pio rearranger communiation options (comp2io) : TRUE implies enable handshake </desc>
   </entry>
 
-  <entry id="PIO_REARR_COMM_ENABLE_ISEND">
+  <entry id="PIO_REARR_COMM_ENABLE_ISEND_COMP2IO">
     <type>logical</type>
     <valid_values>TRUE,FALSE</valid_values>
     <default_value>FALSE</default_value>
     <group>run_pio</group>
     <file>env_run.xml</file>
-    <desc>pio rearranger communiation options: TRUE implies enable isend</desc>
+    <desc>pio rearranger communiation options (comp2io) : TRUE implies enable isend</desc>
+  </entry>
+
+  <entry id="PIO_REARR_COMM_MAX_PEND_REQ_IO2COMP">
+    <type>integer</type>
+    <valid_values></valid_values>
+    <default_value>64</default_value>
+    <group>run_pio</group>
+    <file>env_run.xml</file>
+    <desc>pio rearranger communication max pending requests (io2comp) : -1 implies no bound on max pending requests </desc>
+  </entry>
+
+  <!-- Handshaking is a very bad idea for large process counts and for -->
+  <!-- io2comp (but important for comp2io -->
+  <entry id="PIO_REARR_COMM_ENABLE_HS_IO2COMP">
+    <type>logical</type>
+    <valid_values>TRUE,FALSE</valid_values>
+    <default_value>FALSE</default_value>
+    <group>run_pio</group>
+    <file>env_run.xml</file>
+    <desc>pio rearranger communiation options (io2comp) : TRUE implies enable handshake</desc>
+  </entry>
+
+  <entry id="PIO_REARR_COMM_ENABLE_ISEND_IO2COMP">
+    <type>logical</type>
+    <valid_values>TRUE,FALSE</valid_values>
+    <default_value>TRUE</default_value>
+    <group>run_pio</group>
+    <file>env_run.xml</file>
+    <desc>pio rearranger communiation options (io2comp) : TRUE implies enable isend</desc>
   </entry>
 
   <entry id="PIO_TYPENAME">
@@ -2866,6 +2891,14 @@
     <desc>supplied or computed test id</desc>
   </entry>
 
+  <entry id="TEST_MEMLEAK_TOLERANCE">
+    <type>real</type>
+    <default_value>0.10</default_value>
+    <group>test</group>
+    <file>env_test.xml</file>
+    <desc>Expected relative memory usage growth for test</desc>
+  </entry>
+
   <entry id="GENERATE_BASELINE">
     <type>logical</type>
     <valid_values>TRUE,FALSE</valid_values>
@@ -2943,11 +2976,21 @@
 
   <entry id="CCSM_CPRNC">
     <type>char</type>
-    <default_value>/UNSET</default_value>
+    <default_value>UNSET</default_value>
     <group>test</group>
     <file>env_test.xml</file>
     <desc>standard full pathname of the cprnc executable</desc>
   </entry>
+
+  <entry id="USER_MODS_FULLPATH">
+    <type>char</type>
+    <default_value>UNSET</default_value>
+    <group>user_mods</group>
+    <file>env_case.xml</file>
+    <desc>path to user mods under TESTS_MODS_DIR or USER_MODS_DIR</desc>
+  </entry>
+
+
 
   <!-- ===================================================================== -->
   <!-- component coupling options and frequencies -->
@@ -3398,48 +3441,6 @@
     If set to on, this component set/ grid specification is scientifically supported</desc>
   </entry>
 
-  <entry id="CCSM_CCOST">
-    <type>integer</type>
-    <valid_values></valid_values>
-    <default_value>0</default_value>
-    <values>
-      <!-- estimated cost (used only for development purposes) -->
-      <value compset="_DATM.*_DLND.*_DICE.*_DOCN.*_DROF.*_SGLC_SWAV"		>-3</value> <!-- A -->
-      <value compset="_DATM.*_DICE.*_DOCN.*_WW3"				>-3</value> <!-- A_WAV -->
-      <value compset="_DATM.*_SLND.*_DICE.*_POP2_DROF.*_SGLC_SWAV"		>-1</value> <!-- C -->
-      <value compset="_DATM.*_SLND.*_DICE.*_POP2%ECO_DROF.*_SGLC_SWAV"		> 1</value> <!-- CECO -->
-      <value compset="_DATM.*_SLND.*_CICE.*_DOCN%SOM_DROF.*_SGLC_SWAV"		> 1</value> <!-- D -->
-      <value compset="_DATM.*_SLND.*_CICE.*_POP2_DROF.*_SGLC_SWAV"		>-1</value> <!-- G,H -->
-      <value compset="_DATM.*_SLND.*_CICE.*_POP2%ECO_DROF.*_SGLC_SWAV"		> 1</value> <!-- GECO -->
-      <value compset="_DATM.*_CLM.*_SICE_SOCN_RTM.*_SGLC_SWAV"			>-2</value> <!-- I -->
-      <value compset="_SATM_DLND.*_SICE_SOCN_SROF_CISM_SWAV"			>-5</value> <!-- TG -->
-      <value compset="_SATM_DLND.*_SICE_SOCN_RTM.*_SGLC_SWAV"			>-5</value> <!-- U -->
-      <value compset="_SATM_SLND_SICE_SOCN_SROF_SGLC_SWAV"			>-6</value> <!-- U -->
-      <value compset="_CAM4.*_CLM.*_CICE.*_DOCN.*_DROF.*_SGLC_SWAV"		>0</value>  <!-- E -->
-      <value compset="_CAM4.*_CLM.*_CICE.*_DOCN.*_RTM.*_SGLC_SWAV"		>0</value>  <!-- F -->
-      <value compset="_CAM4.*_CLM.*_DICE.*_DOCN.*_RTM.*_SGLC_SWAV"		>0</value>  <!-- K -->
-      <value compset="_CAM4.*_DLND.*_DICE.*_DOCN.*_SROF_SGLC_SWAV"		>0</value>  <!-- L -->
-      <value compset="_CAM4%TMOZ.*_CLM.*_CICE_DOCN.*_RTM.*_SGLC_SWAV"		>1</value>  <!-- FMOZ -->
-      <value compset="GEOS_CAM4%TBAM.*_CLM.*_CICE_DOCN.*_RTM.*_SGLC_SWAV"	>3</value>  <!-- FSDBAM -->
-      <value compset="_CAM5"							>1</value>
-      <value compset="_CAM[45]%W"						>3</value>
-      <value compset="_CAM[45]%WCSC"						>1</value>
-      <value compset="_CAM5%MOZM"						>3</value>
-      <value compset="_CAM4%MOZS"						>3</value>
-      <value compset="_CAM4%SMA[37]"						>3</value>
-      <value compset="_CAM4%SSOA"						>3</value>
-      <value compset="_CAM4%TMOZ"						>1</value>
-      <value compset="_CAM4.*_BGC%BDRD"						>2</value>
-      <value compset="_CAM4.*_BGC%BPRP"						>2</value>
-      <value compset="CAM.*_CLM.*_CICE.*_POP2%DAR.*_RTM_SGLC_SWAV"		>2</value> <!-- BDAR -->
-      <value compset="DATM.*_DLND.*_DICE.*_POP2%DAR.*_RTM_SGLC_SWAV"		>1</value> <!-- CDAR -->
-      <value compset="DATM.*_DLND.*_CICE.*_POP2%DAR.*_RTM_SGLC_SWAV"		>1</value> <!-- GDAR -->
-    </values>
-    <group>case_cost</group>
-    <file>env_case.xml</file>
-    <desc>2**n relative cost of compset where B is 1 (DO NOT EDIT)</desc>
-  </entry>
-
   <entry id="GLC_NEC">
     <type>integer</type>
     <valid_values>0,1,3,5,10,36</valid_values>
@@ -3515,24 +3516,6 @@
       Note that this is set to TRUE by default for TG compsets - even though there are
       no feedbacks for TG compsets, this enables extra coupler diagnostics for these
       compsets.</desc>
-  </entry>
-
-  <entry id="CCSM_GCOST">
-    <type>integer</type>
-    <valid_values></valid_values>
-    <default_value>0</default_value>
-    <group>case_cost</group>
-    <file>env_case.xml</file>
-    <desc>2**n relative cost of grid where f19_g15 is 1 (DO NOT EDIT)</desc>
-  </entry>
-
-  <entry id="CCSM_MCOST">
-    <type>integer</type>
-    <valid_values></valid_values>
-    <default_value>0</default_value>
-    <group>case_cost</group>
-    <file>env_case.xml</file>
-    <desc>2**n relative cost of machine (DO NOT EDIT)</desc>
   </entry>
 
   <!-- Data Assimilation type stuff -->
@@ -3649,6 +3632,6 @@
     =========================================
   </help>
 
-</entries>
+</entry_id>
 
 

@@ -3,7 +3,7 @@ CIME ERI test  This class inherits from SystemTestsCommon
 """
 from CIME.XML.standard_module_setup import *
 from CIME.SystemTests.system_tests_common import SystemTestsCommon
-
+from CIME.check_input_data import check_all_input_data
 import shutil, glob, os
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,6 @@ class ERI(SystemTestsCommon):
         clone1, clone2 = [self._case.create_clone(clone_path, keepexe=True) for clone_path in [clone1_path, clone2_path]]
         orig_case = self._case
         orig_casevar = orig_case.get_value("CASE")
-
         #
         # determine run lengths needed below
         #
@@ -91,6 +90,9 @@ class ERI(SystemTestsCommon):
         clone1.set_value("HIST_OPTION", "never")
         clone1.flush()
 
+        # if the initial case is hybrid this will put the reference data in the correct location
+        check_all_input_data(clone1)
+
         dout_sr1 = clone1.get_value("DOUT_S_ROOT")
 
         # force cam namelist to write out initial file at end of run
@@ -99,8 +101,7 @@ class ERI(SystemTestsCommon):
                 with open("user_nl_cam", "a") as fd:
                     fd.write("inithist = 'ENDOFRUN'\n")
 
-        self.run_indv(coupler_log_path=os.path.join(dout_sr1, "logs"),
-                      st_archive=True)
+        self.run_indv(st_archive=True, suffix=None)
 
         #
         # (2) Test run:
@@ -146,9 +147,7 @@ class ERI(SystemTestsCommon):
 
         # run ref2 case (all component history files will go to short term archiving)
 
-        self.run_indv(suffix="hybrid",
-                      coupler_log_path=os.path.join(dout_sr2, "logs"),
-                      st_archive=True)
+        self.run_indv(suffix="hybrid", st_archive=True)
 
         #
         # (3a) Test run:
@@ -192,7 +191,7 @@ class ERI(SystemTestsCommon):
             newfile = os.path.basename(newfile)
             os.symlink(item, os.path.join(rundir, newfile))
 
-        self._component_compare_move("hybrid")
+        self._component_compare_copy("hybrid")
 
         # run branch case (short term archiving is off)
         self.run_indv()
