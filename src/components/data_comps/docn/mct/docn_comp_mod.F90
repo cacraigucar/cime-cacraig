@@ -28,6 +28,7 @@ module docn_comp_mod
   use docn_shr_mod   , only: decomp         ! namelist input
   use docn_shr_mod   , only: rest_file      ! namelist input
   use docn_shr_mod   , only: rest_file_strm ! namelist input
+  use docn_shr_mod   , only: rce_sst        ! namelist input
   use docn_shr_mod   , only: nullstr
 
   ! !PUBLIC TYPES:
@@ -760,7 +761,7 @@ CONTAINS
 
     ! Control
 
-    if (sst_option < 1 .or. sst_option > 10) then
+    if (sst_option < 1 .or. sst_option > 11) then
        call shr_sys_abort ('prescribed_sst: ERROR: sst_option must be between 1 and 10')
     end if
 
@@ -919,7 +920,13 @@ CONTAINS
              sst(i) = tmp*(t0_max - t0_min) + t0_min
           end if
        end do
-    end if
+
+     end if
+ 
+     ! RCE 
+     if (sst_option == 11) then
+        sst = rce_sst
+     end if
 
   end subroutine prescribed_sst
 
